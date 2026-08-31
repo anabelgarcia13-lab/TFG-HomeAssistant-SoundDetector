@@ -1,0 +1,10 @@
+{
+    "domain": "sound_detector",
+    "name": "Sound Detector",
+    "version": "1.0.0",
+    "documentation": "https://github.com/anabelgarcia13-lab/TFG-HomeAssistant-SoundDetector",
+    "requirements": [],
+    "codeowners": [],
+    "config_flow": true,
+    "iot_class": "local_polling"
+}
