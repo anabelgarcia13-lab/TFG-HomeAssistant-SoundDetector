@@ -62,12 +62,14 @@ Una vez reiniciado Home Assistant:
   4.Buscar Sound Detector.
   5.Seleccionar la integración para añadirla a Home Assistant.
 
-Recursos de audio
-
-Los archivos de audio incluidos en este repositorio se han obtenido de Freesound y se utilizan como material de prueba para el sistema. Todos ellos tienen licencia "Creative Commons 0", por lo que no es obligatoria su atribución.
-
 Una vez configurada, se creará el sensor Sound Detector, que mostrará el estado de detección y el nivel de confianza proporcionado por el sistema.
+
 
 Nota
 Esta integración está diseñada para funcionar en una red local y requiere que el archivo sound_detector.json esté disponible en la dirección configurada en const.py.
+
+
+Recursos de audio
+
+Los archivos de audio incluidos en este repositorio se han obtenido de Freesound y se utilizan como material de prueba para el sistema. Todos ellos tienen licencia "Creative Commons 0", por lo que no es obligatoria su atribución.
 
