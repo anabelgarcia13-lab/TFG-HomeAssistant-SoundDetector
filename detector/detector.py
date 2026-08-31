@@ -6,21 +6,86 @@ import queue
 import time
 import csv
 import sounddevice as sd
-from scipy.io.wavfile import write, read
+from scipy.io.wavfile import write
+import json
+
+JSON_FILE = r"C:\TFG\shared\sound_detector.json"
+
+def guardar_resultado(sound, confidence):
+
+    datos = {
+        "sound": sound,
+        "confidence": float(confidence),
+        "timestamp": time.time()
+    }
+
+    with open(JSON_FILE, "w", encoding="utf-8") as f:
+        json.dump(datos, f, indent=4)
+
 
 #configuración
 SAMPLE_RATE = 16000
-BUFFER_DURATION = 1  #segundos
+BUFFER_DURATION = 3  #segundos
+BLOCK_DURATION = 0.5
 THRESHOLD = 0.02
 
-TARGET_SOUNDS = [
-    "Glass",
-    "Clink",
-    "Bang",
-    "Chink",
-    "Knock",
-    "Impact"
-]
+EVENTS = {
+    "Silence": [
+        "silence"
+    ],
+
+    "Speech": [
+        "speech",
+        "narration",
+        "monologue",
+        "conversation",
+        "child speech",
+        "whispering"
+    ],
+
+    "Glass Break": [
+        "glass",
+        "shatter",
+        "smash",
+        "break",
+        "crash",
+        "clink"
+    ],
+
+    "Doorbell": [
+        "doorbell",
+        "ding-dong",
+        "ding",
+        "bell",
+        "chime",
+        "ringtone",
+        "knock",
+        "bang"
+    ],
+
+    "Dog Bark": [
+        "dog",
+        "bark",
+        "whimper",
+        "yip"
+    ],
+
+    "Baby Cry": [
+        "baby cry",
+        "crying",
+        "sobbing",
+        "wail"
+    ],
+
+    "Alarm": [
+        "alarm",
+        "siren",
+        "buzzer"
+    ]
+}
+
+print(EVENTS.keys())
+
 
 #cargar modelo YAMNet
 print("Cargando YAMNet...")
@@ -28,22 +93,10 @@ model = hub.load("https://tfhub.dev/google/yamnet/1")
 
 class_map_path = model.class_map_path().numpy()
 
+blocksize = int(SAMPLE_RATE * BLOCK_DURATION)
+
+
 class_names = []
-
-for i, name in enumerate(class_names):
-    if "glass" in name.lower():
-        print(i, name)
-
-keywords = ["glass", "break", "shatter", "smash", "crash", "impact"]
-
-for keyword in keywords:
-    print(f"\n--- {keyword} ---")
-    for i, name in enumerate(class_names):
-        if keyword.lower() in name.lower():
-            print(i, name)
-
-glass_classes = [name for name in class_names if "glass" in name.lower()]
-print(glass_classes)
 
 with open(class_map_path, newline='', encoding='utf-8') as f:
     reader = csv.DictReader(f)
@@ -55,27 +108,13 @@ print("Modelo cargado")
 #recibe el audio del micrófono y lo almacena
 audio_queue = queue.Queue()
 
+sd.query_devices()
+
 def save_buffer_to_wav(buffer, filename="audio.wav"):
     # Convertir a int16
     audio_int16 = np.int16(buffer * 32767)
     write(filename, SAMPLE_RATE, audio_int16)
 
-
-def load_wav(filename):
-    sr, audio = read(filename)
-
-    # Convertir a float32
-    audio = audio.astype(np.float32)
-
-    # Si es int16, normalizar
-    if np.max(np.abs(audio)) > 1:
-        audio /= 32768.0
-
-    # Si es estéreo, quedarse con un canal
-    if len(audio.shape) > 1:
-        audio = audio[:,0]
-
-    return audio
 
 def audio_callback(indata, frames, time_info, status):
     if status:
@@ -88,9 +127,9 @@ def audio_callback(indata, frames, time_info, status):
 
 #se envía el audio a YAMNet y se clasifica en las categorías detectadas
 def detect_sound(audio):
-    scores, embeddings, spectrogram = model(audio)
+    scores, embeddings, spectogram = model(audio)
     scores = scores.numpy()
-    mean_scores = np.mean(scores, axis=0)
+    mean_scores = 0.5*np.mean(scores, axis=0) + 0.5*np.max(scores, axis=0)
 
     results = []
 
@@ -98,7 +137,7 @@ def detect_sound(audio):
         results.append((class_names[i], score))
 
     results.sort(key=lambda x: x[1], reverse=True)
-    return results[:10]
+    return results
 
 
 #procesar continuamente el audio capturado
@@ -123,24 +162,37 @@ def process_audio():
         )
 
         #clasificar el audio
-        save_buffer_to_wav(buffer)
-
-        audio = load_wav("audio.wav")
+        audio = buffer.astype(np.float32)
 
         results = detect_sound(audio)
 
+        event_scores = {}
+
+        for event, words in EVENTS.items():
+
+            best_score = 0
+
+            for label, value in results:
+                if any(w in label.lower() for w in words):
+                    best_score = max(best_score, value)
+
+            event_scores[event] = best_score
+
+
         print("-----")
-        #mostrar las 20 primeras clases detectadas
 
-        for label, score in results:
-            if label in ["Glass", "Chink, clink", "Shatter", "Smash, crash", "Breaking"]:
-                print(f"{label}: {score:.4f}")
+        print("\nEventos detectados")
 
-        #for label, score in results[:20]:
-         #   print(f"{label}: {score:.2f}")
+        for e, s in event_scores.items():
+            print(f"{e}: {s:.4f}")
 
-          #  if label in TARGET_SOUNDS:
-           #         print(f"ALERTA: {label} ({score:.2f})")
+        best_event = max(event_scores, key=event_scores.get)
+
+        if event_scores[best_event] > THRESHOLD:
+            guardar_resultado(best_event, event_scores[best_event])
+        else:
+            guardar_resultado(results[0][0], results[0][1])
+
 
         time.sleep(0.01)
 
@@ -156,8 +208,3 @@ with sd.InputStream(
 ):
     process_audio()
 
-
-
-
-#guardar audio en ficheros .wav y aumentar el intervalo
-#crear diagrama de cómo es el proceso para ponerlo como imagen en la memoria
